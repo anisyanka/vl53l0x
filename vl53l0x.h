@@ -107,6 +107,11 @@ vl53l0x_ret_t vl53l0x_clear_flag_gpio_interrupt(vl53l0x_dev_t *dev); /* DO NOT c
 vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_stop_measurement(vl53l0x_dev_t *dev);
 
+/*
+ * Returns range in millimeters
+ **/
+uint16_t vl53l0x_get_range_mm(vl53l0x_dev_t *dev);
+
 #ifdef __cplusplus
 }
 #endif

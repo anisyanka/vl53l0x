@@ -681,13 +681,7 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	dev->ll->i2c_write_reg(0xFF, 0x00);
 	dev->ll->i2c_write_reg(0x80, 0x00);
 
-	/*
-	 * Set interrupt config to new sample ready
-	 * See VL53L0X_SetGpioConfig() ST API func.
-	 **/
-	dev->ll->i2c_write_reg(GPIO_HV_MUX_ACTIVE_HIGH,
-			dev->ll->i2c_read_reg(GPIO_HV_MUX_ACTIVE_HIGH) & ~0x10); /* polarity low */
-	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CONFIG_GPIO, 0x04);
+	vl53l0x_activate_gpio_interrupt(dev);
 	vl53l0x_clear_flag_gpio_interrupt(dev);
 
 	dev->__meas_time_bud_us = get_measurement_timing_budget(dev);
@@ -709,7 +703,7 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	 * See ST API func VL53L0X_PerformRefCalibration()
 	 * (VL53L0X_perform_ref_calibration() --> VL53L0X_perform_vhv_calibration)
 	 **/
-	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0x01);
+	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0x01); /* Run VHV */
 	if (perform_single_ref_calibration(dev, 0x40)) {
 		return VL53L0X_FAIL;
 	}
@@ -722,6 +716,8 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 
 	/* Restore the previous Sequence Config */
 	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0xE8);
+
+	vl53l0x_stop_measurement(dev);
 
 	return VL53L0X_OK;
 }
@@ -791,7 +787,9 @@ vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
 
 vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev)
 {
-	uint16_t osc_calibrate_val = 0;
+	uint8_t byte = 0xff;
+	uint8_t start_stop_byte = VL53L0X_REG_SYSRANGE_MODE_START_STOP;
+	int timeout_cycles = 0;
 
 	dev->ll->i2c_write_reg(0x80, 0x01);
 	dev->ll->i2c_write_reg(0xFF, 0x01);
@@ -804,6 +802,16 @@ vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev)
 	switch (dev->__measurement_mode) {
 	case VL53L0X_SINGLE:
 		dev->ll->i2c_write_reg(SYSRANGE_START, VL53L0X_REG_SYSRANGE_MODE_START_STOP);
+
+		while ((byte & start_stop_byte) == start_stop_byte) {
+			byte = dev->ll->i2c_read_reg(SYSRANGE_START);
+			dev->ll->delay_ms(5);
+
+			if (timeout_cycles >= 100) {
+				return VL53L0X_FAIL;
+			}
+			++timeout_cycles;
+		}
 		break;
 
 	case VL53L0X_CONTINUOUS:
@@ -812,13 +820,6 @@ vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev)
 		break;
 
 	case VL53L0X_TIMED:
-		osc_calibrate_val = dev->ll->i2c_read_reg_16bit(OSC_CALIBRATE_VAL);
-
-		if (osc_calibrate_val != 0) {
-			dev->__measurement_timeout_ms *= osc_calibrate_val;
-		}
-
-		dev->ll->i2c_write_reg_32bit(SYSTEM_INTERMEASUREMENT_PERIOD, dev->__measurement_timeout_ms);
 		dev->ll->i2c_write_reg(SYSRANGE_START, VL53L0X_REG_SYSRANGE_MODE_TIMED);
 		break;
 
@@ -849,11 +850,22 @@ vl53l0x_ret_t vl53l0x_stop_measurement(vl53l0x_dev_t *dev)
 
 vl53l0x_ret_t vl53l0x_activate_gpio_interrupt(vl53l0x_dev_t *dev)
 {
+	/*
+	 * Set interrupt config to new sample ready
+	 * See VL53L0X_SetGpioConfig() ST API func.
+	 **/
+	dev->ll->i2c_write_reg(GPIO_HV_MUX_ACTIVE_HIGH,
+			dev->ll->i2c_read_reg(GPIO_HV_MUX_ACTIVE_HIGH) & ~0x10); /* polarity low */
+	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CONFIG_GPIO,
+			VL53L0X_GPIOFUNCTIONALITY_NEW_MEASURE_READY);
+
 	return VL53L0X_OK;
 }
 
 vl53l0x_ret_t vl53l0x_deactivate_gpio_interrupt(vl53l0x_dev_t *dev)
 {
+	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CONFIG_GPIO,
+				VL53L0X_GPIOFUNCTIONALITY_OFF);
 	return VL53L0X_OK;
 }
 
@@ -875,4 +887,9 @@ vl53l0x_ret_t vl53l0x_clear_flag_gpio_interrupt(vl53l0x_dev_t *dev)
 	}
 
 	return VL53L0X_OK;
+}
+
+uint16_t vl53l0x_get_range_mm(vl53l0x_dev_t *dev)
+{
+	return dev->ll->i2c_read_reg(RESULT_RANGE_STATUS + 10);
 }
