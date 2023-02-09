@@ -52,15 +52,19 @@ typedef struct
 	 * Internal used only */
 	uint8_t __stop_variable;
 
+	uint16_t __measurement_timeout_ms;
+
 	uint8_t __measurement_mode;
-	uint32_t __measurement_timeout;
 	uint32_t __meas_time_bud_us;
 
 	/* hardware dependent functions */
 	vl53l0x_ll_t *ll;
 } vl53l0x_dev_t;
 
-/* Init and power control */
+/*
+ * Init and power control
+ * Interrupt pin is configured to a new sample ready. Active low.
+ */
 vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_shutdown(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev);
@@ -77,12 +81,30 @@ vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev);
  *
  * VL53L0X_TIMED - ranging is performed in a continuous way after the start API function
  *                 is called. When a measurement is finished, another one is started
- *                 after a user defined delay (parameter time in this API).
+ *                 after a user defined delay (parameter ms in this API).
  *                 This delay is inter-measurement period.
  **/
 vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
 								vl53l0x_measure_mode_t mode,
-								uint32_t time);
+								uint16_t ms);
+
+/*
+ * Enable\disable generation low level on GPIO1 pin on sensor chip, when measurement done.
+ * Works in any mode.
+ **/
+vl53l0x_ret_t vl53l0x_activate_gpio_interrupt(vl53l0x_dev_t *dev);
+vl53l0x_ret_t vl53l0x_deactivate_gpio_interrupt(vl53l0x_dev_t *dev);
+
+/*
+ * Send specific command to start\stop measurement cycle according to the set mode
+ *
+ * Call this function every time in VL53L0X_SINGLE mode to trigger a start of measurement cycle
+ *
+ * Call this function one time in VL53L0X_CONTINUOUS and VL53L0X_TIMED modes.
+ * Better to use  with interrupt activated.
+ **/
+vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev);
+vl53l0x_ret_t vl53l0x_stop_measurement(vl53l0x_dev_t *dev);
 
 #ifdef __cplusplus
 }

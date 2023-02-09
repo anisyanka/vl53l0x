@@ -751,7 +751,7 @@ vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev)
 
 vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
 								vl53l0x_measure_mode_t mode,
-								uint32_t time)
+								uint16_t ms)
 {
 	switch (mode) {
 	case VL53L0X_SINGLE:
@@ -764,7 +764,95 @@ vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
 	}
 
 	dev->__measurement_mode = mode;
-	dev->__measurement_timeout = time;
+	dev->__measurement_timeout_ms = ms;
 
+	return VL53L0X_OK;
+}
+
+/** mask existing bit in #VL53L0X_REG_SYSRANGE_START*/
+#define VL53L0X_REG_SYSRANGE_MODE_MASK		0x0F
+/** bit 0 in #VL53L0X_REG_SYSRANGE_START write 1 toggle state in
+ * continuous mode and arm next shot in single shot mode
+ */
+#define VL53L0X_REG_SYSRANGE_MODE_START_STOP	0x01
+/** bit 1 write 0 in #VL53L0X_REG_SYSRANGE_START set single shot mode */
+#define VL53L0X_REG_SYSRANGE_MODE_SINGLESHOT	0x00
+/** bit 1 write 1 in #VL53L0X_REG_SYSRANGE_START set back-to-back
+ *  operation mode
+ */
+#define VL53L0X_REG_SYSRANGE_MODE_BACKTOBACK	0x02
+/** bit 2 write 1 in #VL53L0X_REG_SYSRANGE_START set timed operation
+ *  mode
+ */
+#define VL53L0X_REG_SYSRANGE_MODE_TIMED			0x04
+/** bit 3 write 1 in #VL53L0X_REG_SYSRANGE_START set histogram operation
+ *  mode
+ */
+#define VL53L0X_REG_SYSRANGE_MODE_HISTOGRAM		0x08
+
+vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev)
+{
+	uint16_t osc_calibrate_val = 0;
+
+	dev->ll->i2c_write_reg(0x80, 0x01);
+	dev->ll->i2c_write_reg(0xFF, 0x01);
+	dev->ll->i2c_write_reg(0x00, 0x00);
+	dev->ll->i2c_write_reg(0x91, dev->__stop_variable);
+	dev->ll->i2c_write_reg(0x00, 0x01);
+	dev->ll->i2c_write_reg(0xFF, 0x00);
+	dev->ll->i2c_write_reg(0x80, 0x00);
+
+	switch (dev->__measurement_mode) {
+	case VL53L0X_SINGLE:
+		dev->ll->i2c_write_reg(SYSRANGE_START, VL53L0X_REG_SYSRANGE_MODE_START_STOP);
+		break;
+
+	case VL53L0X_CONTINUOUS:
+		/* continuous back-to-back mode */
+		dev->ll->i2c_write_reg(SYSRANGE_START, VL53L0X_REG_SYSRANGE_MODE_BACKTOBACK);
+		break;
+
+	case VL53L0X_TIMED:
+		osc_calibrate_val = dev->ll->i2c_read_reg_16bit(OSC_CALIBRATE_VAL);
+
+		if (osc_calibrate_val != 0) {
+			dev->__measurement_timeout_ms *= osc_calibrate_val;
+		}
+
+		dev->ll->i2c_write_reg_32bit(SYSTEM_INTERMEASUREMENT_PERIOD, dev->__measurement_timeout_ms);
+		dev->ll->i2c_write_reg(SYSRANGE_START, VL53L0X_REG_SYSRANGE_MODE_TIMED);
+		break;
+
+	default:
+		return VL53L0X_FAIL;
+	}
+
+	return VL53L0X_OK;
+}
+
+vl53l0x_ret_t vl53l0x_stop_measurement(vl53l0x_dev_t *dev)
+{
+	dev->ll->i2c_write_reg(SYSRANGE_START, VL53L0X_REG_SYSRANGE_MODE_SINGLESHOT);
+	dev->ll->i2c_write_reg(0xFF, 0x01);
+	dev->ll->i2c_write_reg(0x00, 0x00);
+	dev->ll->i2c_write_reg(0x91, 0x00);
+	dev->ll->i2c_write_reg(0x00, 0x01);
+	dev->ll->i2c_write_reg(0xFF, 0x00);
+
+	return VL53L0X_OK;
+}
+
+#define VL53L0X_GPIOFUNCTIONALITY_OFF	0 /* NO Interrupt  */
+#define VL53L0X_GPIOFUNCTIONALITY_THRESHOLD_CROSSED_LOW	1 /* Level Low (value < thresh_low)  */
+#define VL53L0X_GPIOFUNCTIONALITY_THRESHOLD_CROSSED_HIGH	2 /* Level High (value>thresh_high) */
+#define VL53L0X_GPIOFUNCTIONALITY_THRESHOLD_CROSSED_OUT	3 /* Out Of Window (value < thresh_low OR value > thresh_high)  */
+#define VL53L0X_GPIOFUNCTIONALITY_NEW_MEASURE_READY	4 /* New Sample Ready  */
+
+vl53l0x_ret_t vl53l0x_activate_gpio_interrupt(vl53l0x_dev_t *dev)
+{
+	return VL53L0X_OK;
+}
+vl53l0x_ret_t vl53l0x_deactivate_gpio_interrupt(vl53l0x_dev_t *dev)
+{
 	return VL53L0X_OK;
 }
