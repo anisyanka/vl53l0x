@@ -852,7 +852,28 @@ vl53l0x_ret_t vl53l0x_activate_gpio_interrupt(vl53l0x_dev_t *dev)
 {
 	return VL53L0X_OK;
 }
+
 vl53l0x_ret_t vl53l0x_deactivate_gpio_interrupt(vl53l0x_dev_t *dev)
 {
+	return VL53L0X_OK;
+}
+
+vl53l0x_ret_t vl53l0x_clear_flag_gpio_interrupt(vl53l0x_dev_t *dev)
+{
+	uint8_t byte = 0xff;
+	int timeout_cycles = 0;
+
+	while ((byte & 0x07) != 0x00) {
+		dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CLEAR, 0x01);
+		dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CLEAR, 0x00);
+		byte = dev->ll->i2c_read_reg(RESULT_INTERRUPT_STATUS);
+		dev->ll->delay_ms(5);
+
+		if (timeout_cycles >= 100) {
+			return VL53L0X_FAIL;
+		}
+		++timeout_cycles;
+	}
+
 	return VL53L0X_OK;
 }

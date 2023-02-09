@@ -94,6 +94,7 @@ vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
  **/
 vl53l0x_ret_t vl53l0x_activate_gpio_interrupt(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_deactivate_gpio_interrupt(vl53l0x_dev_t *dev);
+vl53l0x_ret_t vl53l0x_clear_flag_gpio_interrupt(vl53l0x_dev_t *dev); /* DO NOT call in a real ISR */
 
 /*
  * Send specific command to start\stop measurement cycle according to the set mode
