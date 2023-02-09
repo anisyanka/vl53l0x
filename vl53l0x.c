@@ -685,11 +685,10 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	 * Set interrupt config to new sample ready
 	 * See VL53L0X_SetGpioConfig() ST API func.
 	 **/
-	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CONFIG_GPIO, 0x04);
 	dev->ll->i2c_write_reg(GPIO_HV_MUX_ACTIVE_HIGH,
-			dev->ll->i2c_read_reg(GPIO_HV_MUX_ACTIVE_HIGH) & ~0x10); /* active low */
-	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CLEAR, 0x01);
-
+			dev->ll->i2c_read_reg(GPIO_HV_MUX_ACTIVE_HIGH) & ~0x10); /* polarity low */
+	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CONFIG_GPIO, 0x04);
+	vl53l0x_clear_flag_gpio_interrupt(dev);
 
 	dev->__meas_time_bud_us = get_measurement_timing_budget(dev);
 
