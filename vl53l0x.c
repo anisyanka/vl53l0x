@@ -470,7 +470,7 @@ static int set_measurement_timing_budget(vl53l0x_dev_t *dev, uint32_t budget_us)
 		dev->ll->i2c_write_reg_16bit(FINAL_RANGE_CONFIG_TIMEOUT_MACROP_HI,
 			encode_timeout(final_range_timeout_mclks));
 
-		dev->__g_meas_time_bud_us = budget_us;
+		dev->__meas_time_bud_us = budget_us;
 	}
 
 	return 0;
@@ -691,7 +691,7 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CLEAR, 0x01);
 
 
-	dev->__g_meas_time_bud_us = get_measurement_timing_budget(dev);
+	dev->__meas_time_bud_us = get_measurement_timing_budget(dev);
 
 	/*
 	 * Disable MSRC and TCC by default.
@@ -702,7 +702,7 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0xE8);
 
 	/* Recalculate timing budget */
-	if (set_measurement_timing_budget(dev, dev->__g_meas_time_bud_us)) {
+	if (set_measurement_timing_budget(dev, dev->__meas_time_bud_us)) {
 		return VL53L0X_FAIL;
 	}
 

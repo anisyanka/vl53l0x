@@ -54,7 +54,7 @@ typedef struct
 
 	uint8_t __measurement_mode;
 	uint32_t __measurement_timeout;
-	uint32_t __g_meas_time_bud_us;
+	uint32_t __meas_time_bud_us;
 
 	/* hardware dependent functions */
 	vl53l0x_ll_t *ll;
