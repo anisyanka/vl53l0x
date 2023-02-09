@@ -56,14 +56,6 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_shutdown(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev);
 
-/*
- * There is an initial, once only, calibration step required that should be
- * applied at customer level during the manufacturing process. This flow takes
- * into account all parameters (cover glass, temperature & voltage)
- * from the application.
- **/
-vl53l0x_ret_t vl53l0x_customer_calibration(vl53l0x_dev_t *dev);
-
 #ifdef __cplusplus
 }
 #endif

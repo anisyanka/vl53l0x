@@ -476,6 +476,30 @@ static int set_measurement_timing_budget(vl53l0x_dev_t *dev, uint32_t budget_us)
 	return 0;
 }
 
+/*
+ * Based on VL53L0X_perform_single_ref_calibration()
+ *
+ * Returns 0 if OK
+ **/
+static int perform_single_ref_calibration(vl53l0x_dev_t *dev, uint8_t vhv_init_byte)
+{
+	int timeout_cycles = 0;
+	dev->ll->i2c_write_reg(SYSRANGE_START, 0x01 | vhv_init_byte); /* VL53L0X_REG_SYSRANGE_MODE_START_STOP */
+
+	while ((dev->ll->i2c_read_reg(RESULT_INTERRUPT_STATUS) & 0x07) == 0) {
+		dev->ll->delay_ms(50);
+		if (timeout_cycles >= 20) {
+			return 1;
+		}
+		++timeout_cycles;
+	}
+
+	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CLEAR, 0x01);
+	dev->ll->i2c_write_reg(SYSRANGE_START, 0x00);
+
+	return 0;
+}
+
 vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 {
 	if (check_args(dev)) {
@@ -678,8 +702,23 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 		return VL53L0X_FAIL;
 	}
 
-	/* See ST API func VL53L0X_PerformRefCalibration()
-	(VL53L0X_perform_ref_calibration()) */
+	/*
+	 * See ST API func VL53L0X_PerformRefCalibration()
+	 * (VL53L0X_perform_ref_calibration() --> VL53L0X_perform_vhv_calibration)
+	 **/
+	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0x01);
+	if (perform_single_ref_calibration(dev, 0x40)) {
+		return VL53L0X_FAIL;
+	}
+
+	/* See VL53L0X_perform_phase_calibration() */
+	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0x02);
+	if (perform_single_ref_calibration(dev, 0x00)) {
+		return VL53L0X_FAIL;
+	}
+
+	/* Restore the previous Sequence Config */
+	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0xE8);
 
 	return VL53L0X_OK;
 }
@@ -703,10 +742,5 @@ vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev)
 
 	dev->ll->xshut_set();
 
-	return VL53L0X_OK;
-}
-
-vl53l0x_ret_t vl53l0x_customer_calibration(vl53l0x_dev_t *dev)
-{
 	return VL53L0X_OK;
 }
