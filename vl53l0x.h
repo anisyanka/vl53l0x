@@ -16,6 +16,12 @@ typedef enum {
 	VL53L0X_FAIL
 } vl53l0x_ret_t;
 
+typedef enum {
+	VL53L0X_SINGLE,
+	VL53L0X_CONTINUOUS,
+	VL53L0X_TIMED,
+} vl53l0x_measure_mode_t;
+
 /* Low Level functions which must be implemented by user */
 typedef struct
 {
@@ -45,6 +51,9 @@ typedef struct
 	/* Read by init ST API and used when starting measurement.
 	 * Internal used only */
 	uint8_t __stop_variable;
+
+	uint8_t __measurement_mode;
+	uint32_t __measurement_timeout;
 	uint32_t __g_meas_time_bud_us;
 
 	/* hardware dependent functions */
@@ -55,6 +64,25 @@ typedef struct
 vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_shutdown(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev);
+
+/*
+ * modes:
+ * VL53L0X_SINGLE - ranging is performed only once after the start API function is called.
+ *                  System returns to SW standby automatically.
+ *
+ * VL53L0X_CONTINUOUS - ranging is performed in a continuous way after the start API function
+ *                      is called. As soon as the measurement is finished, another one
+ *                      is started without delay. User has to stop the ranging to return
+ *                      to SW standby. The last measurement is completed before stopping.
+ *
+ * VL53L0X_TIMED - ranging is performed in a continuous way after the start API function
+ *                 is called. When a measurement is finished, another one is started
+ *                 after a user defined delay (parameter time in this API).
+ *                 This delay is inter-measurement period.
+ **/
+vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
+								vl53l0x_measure_mode_t mode,
+								uint32_t time);
 
 #ifdef __cplusplus
 }

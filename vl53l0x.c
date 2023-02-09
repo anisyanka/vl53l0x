@@ -585,8 +585,10 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 
 	for (uint8_t i = 0; i < 48; i++) {
 		if (i < first_spad_to_enable || spads_enabled == spad_count) {
-			// This bit is lower than the first one that should be enabled, or
-			// (reference_spad_count) bits have already been enabled, so zero this bit
+			/*
+			 * This bit is lower than the first one that should be enabled, or
+			 * (reference_spad_count) bits have already been enabled, so zero this bit
+			 **/
 			ref_spad_map[i / 8] &= ~(1 << (i % 8));
 		} else if ((ref_spad_map[i / 8] >> (i % 8)) & 0x1) {
 			spads_enabled++;
@@ -594,8 +596,10 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	}
 	dev->ll->i2c_write_reg_multi(GLOBAL_CONFIG_SPAD_ENABLES_REF_0, ref_spad_map, 6);
 
-	// See ST API VL53L0X_load_tuning_settings() func.
-	// DefaultTuningSettings from vl53l0x_tuning.h
+	/*
+	 * See ST API VL53L0X_load_tuning_settings() func.
+	 * DefaultTuningSettings from vl53l0x_tuning.h
+	 **/
 	dev->ll->i2c_write_reg(0xFF, 0x01);
 	dev->ll->i2c_write_reg(0x00, 0x00);
 	dev->ll->i2c_write_reg(0xFF, 0x00);
@@ -741,6 +745,26 @@ vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev)
 	}
 
 	dev->ll->xshut_set();
+
+	return VL53L0X_OK;
+}
+
+vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
+								vl53l0x_measure_mode_t mode,
+								uint32_t time)
+{
+	switch (mode) {
+	case VL53L0X_SINGLE:
+	case VL53L0X_CONTINUOUS:
+	case VL53L0X_TIMED:
+		break;
+
+	default:
+		return VL53L0X_FAIL;
+	}
+
+	dev->__measurement_mode = mode;
+	dev->__measurement_timeout = time;
 
 	return VL53L0X_OK;
 }
