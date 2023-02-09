@@ -13,13 +13,13 @@ extern "C" {
 /* Any functions of the lib returns one of these values */
 typedef enum {
 	VL53L0X_OK,
-	VL53L0X_FAIL,
+	VL53L0X_FAIL
 } vl53l0x_ret_t;
 
 /* Low Level functions which must be implemented by user */
 typedef struct
 {
-	/* millisecond program delay */
+	/* Millisecond program delay */
 	void (*delay_ms)(uint32_t ms);
 
 	/* I2C communication low level functions */
@@ -28,7 +28,11 @@ typedef struct
 	void (*i2c_write_reg_32bit)(uint8_t reg, uint32_t value);
 	uint8_t (*i2c_read_reg)(uint8_t reg);
 	uint16_t (*i2c_read_reg_16bit)(uint8_t reg);
-	uint32_t (*i2c_read_reg_32_bit)(uint8_t reg); 
+	uint32_t (*i2c_read_reg_32_bit)(uint8_t reg);
+
+	/* Control power pin. Don't implement if don't use this pin */
+	void (*xshut_set)(void);
+	void (*xshut_reset)(void);
 } vl53l0x_ll_t;
 
 typedef struct
@@ -42,6 +46,8 @@ typedef struct
 
 /* */
 vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev);
+vl53l0x_ret_t vl53l0x_shutdown(vl53l0x_dev_t *dev);
+vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev);
 
 /*
  * There is an initial, once only, calibration step required that should be

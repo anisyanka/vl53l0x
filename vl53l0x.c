@@ -82,6 +82,33 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 		return VL53L0X_FAIL;
 	}
 
+	vl53l0x_power_up();
+
+	/* Wait 1.2 ms max (according to spec) until vl53l0x fw boots */
+	dev->ll->delay_ms(2);
+
+	return VL53L0X_OK;
+}
+
+vl53l0x_ret_t vl53l0x_shutdown(vl53l0x_dev_t *dev)
+{
+	if (!dev->ll->xshut_set || !dev->ll->xshut_reset) {
+		return VL53L0X_FAIL;
+	}
+
+	dev->ll->xshut_reset();
+
+	return VL53L0X_OK;
+}
+
+vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev)
+{
+	if (!dev->ll->xshut_set || !dev->ll->xshut_reset) {
+		return VL53L0X_FAIL;
+	}
+
+	dev->ll->xshut_set();
+
 	return VL53L0X_OK;
 }
 
