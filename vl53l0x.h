@@ -16,16 +16,6 @@ typedef enum {
 	VL53L0X_FAIL,
 } vl53l0x_ret_t;
 
-/* Defines the parameters of the vl53l0x_get_dev_info() function */
-typedef struct {
-	char name[VL53L0X_MAX_STRING_LENGTH]; /* Name of the device */
-	char type[VL53L0X_MAX_STRING_LENGTH]; /* Type of the Device e.g VL53L0X */
-	char product_id[VL53L0X_MAX_STRING_LENGTH]; /* Product identifier string */
-	uint8_t Product_type; /* VL53L0X = 1, VL53L1 = 2 */
-	uint8_t revision_major;
-	uint8_t revision_minor;
-} vl53l0x_dev_info_t;
-
 /* Low Level functions which must be implemented by user */
 typedef struct
 {
@@ -48,16 +38,10 @@ typedef struct
 
 	/* hardware dependent functions */
 	vl53l0x_ll_t *ll;
-
-	/* info from the sensor */
-	vl53l0x_dev_info_t *info;
 } vl53l0x_dev_t;
 
 /* */
 vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev);
-
-/* Obtain name, type, productID, product type, revision from a sensor */
-vl53l0x_ret_t vl53l0x_get_dev_info(vl53l0x_dev_t *dev);
 
 /*
  * There is an initial, once only, calibration step required that should be

@@ -85,11 +85,6 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	return VL53L0X_OK;
 }
 
-vl53l0x_ret_t vl53l0x_get_dev_info(vl53l0x_dev_t *dev)
-{
-	return VL53L0X_OK;
-}
-
 vl53l0x_ret_t vl53l0x_customer_calibration(vl53l0x_dev_t *dev)
 {
 	return VL53L0X_OK;
