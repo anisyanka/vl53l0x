@@ -482,14 +482,18 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 		return VL53L0X_FAIL;
 	}
 
-	if (check_i2c_comm(dev)) {
-		return VL53L0X_FAIL;
-	}
-
+	/* HW reset */
+	dev->ll->delay_ms(100);
+	vl53l0x_shutdown(dev);
+	dev->ll->delay_ms(100);
 	vl53l0x_power_up(dev);
 
 	/* Wait 1.2 ms max (according to the spec) until vl53l0x fw boots */
 	dev->ll->delay_ms(2);
+
+	if (check_i2c_comm(dev)) {
+		return VL53L0X_FAIL;
+	}
 
 	/*
 	 * STM API VL53L0X_DataInit() function is called one time, and it performs
