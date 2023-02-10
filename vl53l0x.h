@@ -22,6 +22,12 @@ typedef enum {
 	VL53L0X_TIMED,
 } vl53l0x_measure_mode_t;
 
+typedef enum {
+	VL53L0X_POLLING,
+	VL53L0X_INTERRUPT
+} vl53l0x_polling_int_mode_t;
+
+
 /* Low Level functions which must be implemented by user */
 typedef struct
 {
@@ -51,20 +57,16 @@ typedef struct
 	/* Read by init ST API and used when starting measurement.
 	 * Internal used only */
 	uint8_t __stop_variable;
-
 	uint16_t __measurement_timeout_ms;
-
 	uint8_t __measurement_mode;
+	uint8_t __polling_interrupt_mode;
 	uint32_t __meas_time_bud_us;
 
 	/* hardware dependent functions */
 	vl53l0x_ll_t *ll;
 } vl53l0x_dev_t;
 
-/*
- * Init and power control
- * Interrupt pin is configured to a new sample ready. Active low.
- */
+/* Init and power control */
 vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_shutdown(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev);
@@ -110,7 +112,7 @@ vl53l0x_ret_t vl53l0x_stop_measurement(vl53l0x_dev_t *dev);
 /*
  * Returns range in millimeters
  **/
-uint16_t vl53l0x_get_range_mm(vl53l0x_dev_t *dev);
+uint16_t vl53l0x_get_range_mm_oneshot(vl53l0x_dev_t *dev);
 
 #ifdef __cplusplus
 }

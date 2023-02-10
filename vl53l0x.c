@@ -106,6 +106,12 @@ enum {
 	ALGO_PHASECAL_CONFIG_TIMEOUT                = 0x30,
 };
 
+#define VL53L0X_GPIOFUNCTIONALITY_OFF	0 /* NO Interrupt  */
+#define VL53L0X_GPIOFUNCTIONALITY_THRESHOLD_CROSSED_LOW	1 /* Level Low (value < thresh_low)  */
+#define VL53L0X_GPIOFUNCTIONALITY_THRESHOLD_CROSSED_HIGH	2 /* Level High (value>thresh_high) */
+#define VL53L0X_GPIOFUNCTIONALITY_THRESHOLD_CROSSED_OUT	3 /* Out Of Window (value < thresh_low OR value > thresh_high)  */
+#define VL53L0X_GPIOFUNCTIONALITY_NEW_MEASURE_READY	4 /* New Sample Ready  */
+
 /*
  * TCC: Target CentreCheck
  * MSRC: Minimum Signal Rate Check
@@ -476,6 +482,33 @@ static int set_measurement_timing_budget(vl53l0x_dev_t *dev, uint32_t budget_us)
 	return 0;
 }
 
+/* Returns 0 if data is ready */
+static int get_measurement_data_ready(vl53l0x_dev_t *dev)
+{
+	uint8_t status = 0;
+
+	if (dev->__polling_interrupt_mode == VL53L0X_INTERRUPT) {
+		status = dev->ll->i2c_read_reg(RESULT_INTERRUPT_STATUS);
+		if (status & 0x18) {
+			return 1; /* range error */
+		}
+
+		if ((status & 0x07) == VL53L0X_GPIOFUNCTIONALITY_NEW_MEASURE_READY) {
+			return 0;
+		}
+
+	} else if (dev->__polling_interrupt_mode == VL53L0X_POLLING) {
+		status = dev->ll->i2c_read_reg(RESULT_RANGE_STATUS);
+		if (status & 0x01) {
+			return 0;
+		} else {
+			return 1;
+		}
+	}
+
+	return 1;
+}
+
 /*
  * Based on VL53L0X_perform_single_ref_calibration()
  *
@@ -486,7 +519,8 @@ static int perform_single_ref_calibration(vl53l0x_dev_t *dev, uint8_t vhv_init_b
 	int timeout_cycles = 0;
 	dev->ll->i2c_write_reg(SYSRANGE_START, 0x01 | vhv_init_byte); /* VL53L0X_REG_SYSRANGE_MODE_START_STOP */
 
-	while ((dev->ll->i2c_read_reg(RESULT_INTERRUPT_STATUS) & 0x07) == 0) {
+	/* Get data ready */
+	while (get_measurement_data_ready(dev) != 0) {
 		dev->ll->delay_ms(50);
 		if (timeout_cycles >= 20) {
 			return 1;
@@ -494,7 +528,7 @@ static int perform_single_ref_calibration(vl53l0x_dev_t *dev, uint8_t vhv_init_b
 		++timeout_cycles;
 	}
 
-	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CLEAR, 0x01);
+	vl53l0x_clear_flag_gpio_interrupt(dev);
 	dev->ll->i2c_write_reg(SYSRANGE_START, 0x00);
 
 	return 0;
@@ -681,7 +715,7 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	dev->ll->i2c_write_reg(0xFF, 0x00);
 	dev->ll->i2c_write_reg(0x80, 0x00);
 
-	vl53l0x_activate_gpio_interrupt(dev);
+	vl53l0x_deactivate_gpio_interrupt(dev);
 	vl53l0x_clear_flag_gpio_interrupt(dev);
 
 	dev->__meas_time_bud_us = get_measurement_timing_budget(dev);
@@ -718,6 +752,7 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0xE8);
 
 	vl53l0x_stop_measurement(dev);
+	dev->ll->delay_ms(2);
 
 	return VL53L0X_OK;
 }
@@ -842,12 +877,6 @@ vl53l0x_ret_t vl53l0x_stop_measurement(vl53l0x_dev_t *dev)
 	return VL53L0X_OK;
 }
 
-#define VL53L0X_GPIOFUNCTIONALITY_OFF	0 /* NO Interrupt  */
-#define VL53L0X_GPIOFUNCTIONALITY_THRESHOLD_CROSSED_LOW	1 /* Level Low (value < thresh_low)  */
-#define VL53L0X_GPIOFUNCTIONALITY_THRESHOLD_CROSSED_HIGH	2 /* Level High (value>thresh_high) */
-#define VL53L0X_GPIOFUNCTIONALITY_THRESHOLD_CROSSED_OUT	3 /* Out Of Window (value < thresh_low OR value > thresh_high)  */
-#define VL53L0X_GPIOFUNCTIONALITY_NEW_MEASURE_READY	4 /* New Sample Ready  */
-
 vl53l0x_ret_t vl53l0x_activate_gpio_interrupt(vl53l0x_dev_t *dev)
 {
 	/*
@@ -859,6 +888,8 @@ vl53l0x_ret_t vl53l0x_activate_gpio_interrupt(vl53l0x_dev_t *dev)
 	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CONFIG_GPIO,
 			VL53L0X_GPIOFUNCTIONALITY_NEW_MEASURE_READY);
 
+	dev->__polling_interrupt_mode = VL53L0X_INTERRUPT;
+
 	return VL53L0X_OK;
 }
 
@@ -866,6 +897,8 @@ vl53l0x_ret_t vl53l0x_deactivate_gpio_interrupt(vl53l0x_dev_t *dev)
 {
 	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CONFIG_GPIO,
 				VL53L0X_GPIOFUNCTIONALITY_OFF);
+	dev->__polling_interrupt_mode = VL53L0X_POLLING;
+
 	return VL53L0X_OK;
 }
 
@@ -889,7 +922,29 @@ vl53l0x_ret_t vl53l0x_clear_flag_gpio_interrupt(vl53l0x_dev_t *dev)
 	return VL53L0X_OK;
 }
 
-uint16_t vl53l0x_get_range_mm(vl53l0x_dev_t *dev)
+uint16_t vl53l0x_get_range_mm_oneshot(vl53l0x_dev_t *dev)
 {
+	// VL53L0X_PerformSingleRangingMeasurement -->
+
+	// VL53L0X_PerformSingleMeasurement -->
+	// dev->__measurement_mode = VL53L0X_SINGLE;
+	// vl53l0x_start_measurement(dev);
+	// Status = VL53L0X_RdByte(Dev, VL53L0X_REG_RESULT_INTERRUPT_STATUS,
+	// 			&Byte);
+	// *pInterruptMaskStatus = Byte & 0x07;
+
+	// if (Byte & 0x18)
+	// 	Status = VL53L0X_ERROR_RANGE_ERROR;
+
+
+
+	// Status = VL53L0X_RdByte(Dev, VL53L0X_REG_RESULT_RANGE_STATUS,
+	// 		&SysRangeStatusRegister);
+
+
+
+
+	// VL53L0X_GetRangingMeasurementData
+	// VL53L0X_ClearInterruptMask
 	return dev->ll->i2c_read_reg(RESULT_RANGE_STATUS + 10);
 }
