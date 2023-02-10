@@ -16,6 +16,9 @@
 #define ADDR_BYTE_WRITE (0x52)
 #define ADDR_BYTE_READ	(0x53)
 
+#define VL53L0X_MAKEUINT16(lsb, msb) (uint16_t)((((uint16_t)msb)<<8) + \
+		(uint16_t)lsb)
+
 /*
  * I2C interface - reference registers
  * The registers can be used to validate the user I2C interface.
@@ -506,6 +509,8 @@ static int get_measurement_data_ready(vl53l0x_dev_t *dev)
 		}
 	}
 
+	dev->ll->delay_ms(2);
+
 	return 1;
 }
 
@@ -750,8 +755,6 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 
 	/* Restore the previous Sequence Config */
 	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0xE8);
-
-	vl53l0x_stop_measurement(dev);
 	dev->ll->delay_ms(2);
 
 	return VL53L0X_OK;
@@ -838,14 +841,15 @@ vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev)
 	case VL53L0X_SINGLE:
 		dev->ll->i2c_write_reg(SYSRANGE_START, VL53L0X_REG_SYSRANGE_MODE_START_STOP);
 
+		byte = start_stop_byte;
 		while ((byte & start_stop_byte) == start_stop_byte) {
-			byte = dev->ll->i2c_read_reg(SYSRANGE_START);
 			dev->ll->delay_ms(5);
-
 			if (timeout_cycles >= 100) {
 				return VL53L0X_FAIL;
 			}
 			++timeout_cycles;
+
+			byte = dev->ll->i2c_read_reg(SYSRANGE_START);
 		}
 		break;
 
@@ -883,10 +887,10 @@ vl53l0x_ret_t vl53l0x_activate_gpio_interrupt(vl53l0x_dev_t *dev)
 	 * Set interrupt config to new sample ready
 	 * See VL53L0X_SetGpioConfig() ST API func.
 	 **/
-	dev->ll->i2c_write_reg(GPIO_HV_MUX_ACTIVE_HIGH,
-			dev->ll->i2c_read_reg(GPIO_HV_MUX_ACTIVE_HIGH) & ~0x10); /* polarity low */
 	dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CONFIG_GPIO,
 			VL53L0X_GPIOFUNCTIONALITY_NEW_MEASURE_READY);
+	dev->ll->i2c_write_reg(GPIO_HV_MUX_ACTIVE_HIGH,
+			dev->ll->i2c_read_reg(GPIO_HV_MUX_ACTIVE_HIGH) & ~0x10); /* polarity low */
 
 	dev->__polling_interrupt_mode = VL53L0X_INTERRUPT;
 
@@ -922,29 +926,34 @@ vl53l0x_ret_t vl53l0x_clear_flag_gpio_interrupt(vl53l0x_dev_t *dev)
 	return VL53L0X_OK;
 }
 
-uint16_t vl53l0x_get_range_mm_oneshot(vl53l0x_dev_t *dev)
+/* Based on VL53L0X_PerformSingleRangingMeasurement() */
+vl53l0x_ret_t vl53l0x_get_range_mm_oneshot(vl53l0x_dev_t *dev, vl53l0x_range *range)
 {
-	// VL53L0X_PerformSingleRangingMeasurement -->
+	int timeout_cycles = 0;
+	uint8_t buf[12];
 
-	// VL53L0X_PerformSingleMeasurement -->
-	// dev->__measurement_mode = VL53L0X_SINGLE;
-	// vl53l0x_start_measurement(dev);
-	// Status = VL53L0X_RdByte(Dev, VL53L0X_REG_RESULT_INTERRUPT_STATUS,
-	// 			&Byte);
-	// *pInterruptMaskStatus = Byte & 0x07;
+	/* VL53L0X_PerformSingleMeasurement */
+	dev->__measurement_mode = VL53L0X_SINGLE;
+	vl53l0x_start_measurement(dev);
 
-	// if (Byte & 0x18)
-	// 	Status = VL53L0X_ERROR_RANGE_ERROR;
+	/* Get data ready */
+	while (get_measurement_data_ready(dev) != 0) {
+		dev->ll->delay_ms(50);
+		if (timeout_cycles >= 20) {
+			return VL53L0X_FAIL;
+		}
+		++timeout_cycles;
+	}
 
+	/* VL53L0X_GetRangingMeasurementData */
+	dev->ll->i2c_read_reg_multi(0x14, buf, 12);
 
+	range->range_status = buf[0];
+	range->effective_spad_cnt = VL53L0X_MAKEUINT16(buf[3],buf[2]);
+	range->uncorrected_range_mm = VL53L0X_MAKEUINT16(buf[10], buf[11]);
 
-	// Status = VL53L0X_RdByte(Dev, VL53L0X_REG_RESULT_RANGE_STATUS,
-	// 		&SysRangeStatusRegister);
+	/* VL53L0X_ClearInterruptMask */
+	vl53l0x_clear_flag_gpio_interrupt(dev);
 
-
-
-
-	// VL53L0X_GetRangingMeasurementData
-	// VL53L0X_ClearInterruptMask
-	return dev->ll->i2c_read_reg(RESULT_RANGE_STATUS + 10);
+	return VL53L0X_OK;
 }

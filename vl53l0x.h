@@ -24,8 +24,26 @@ typedef enum {
 
 typedef enum {
 	VL53L0X_POLLING,
-	VL53L0X_INTERRUPT
+	VL53L0X_INTERRUPT,
 } vl53l0x_polling_int_mode_t;
+
+typedef struct
+{
+	/* Range distance in millimeter */
+	uint16_t uncorrected_range_mm;
+
+	/* SPAD count for the return signal. 8.8 format
+	 * To obtain Real value it should be divided by 256
+	 **/
+	uint16_t effective_spad_cnt;
+
+	/*
+	 * Range Status for the current measurement. This is device
+	 * dependent. Value = 0 means value is valid.
+	 **/
+	uint8_t range_status;
+
+} vl53l0x_range;
 
 
 /* Low Level functions which must be implemented by user */
@@ -110,9 +128,9 @@ vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev);
 vl53l0x_ret_t vl53l0x_stop_measurement(vl53l0x_dev_t *dev);
 
 /*
- * Returns range in millimeters
+ * Returns range in millimeters via 'range' parameter
  **/
-uint16_t vl53l0x_get_range_mm_oneshot(vl53l0x_dev_t *dev);
+vl53l0x_ret_t vl53l0x_get_range_mm_oneshot(vl53l0x_dev_t *dev, vl53l0x_range *range);
 
 #ifdef __cplusplus
 }
