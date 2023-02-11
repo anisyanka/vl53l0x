@@ -371,31 +371,6 @@ static int get_measurement_data_ready(vl53l0x_dev_t *dev)
 }
 
 /*
- * Based on VL53L0X_perform_single_ref_calibration()
- *
- * Returns 0 if OK
- **/
-static int perform_single_ref_calibration(vl53l0x_dev_t *dev, uint8_t vhv_init_byte)
-{
-	int timeout_cycles = 0;
-	dev->ll->i2c_write_reg(SYSRANGE_START, 0x01 | vhv_init_byte); /* VL53L0X_REG_SYSRANGE_MODE_START_STOP */
-
-	/* Get data ready */
-	while (get_measurement_data_ready(dev) != 0) {
-		dev->ll->delay_ms(50);
-		if (timeout_cycles >= 20) {
-			return 1;
-		}
-		++timeout_cycles;
-	}
-
-	vl53l0x_clear_flag_gpio_interrupt(dev);
-	dev->ll->i2c_write_reg(SYSRANGE_START, 0x00);
-
-	return 0;
-}
-
-/*
  * Returns 0 if OK
  * Based on VL53L0X_GetInterMeasurementPeriodMilliSeconds()
  **/
@@ -1451,15 +1426,6 @@ static int set_reference_spads(vl53l0x_dev_t *dev,
 }
 
 /* Return 0 if OK */
-static int perform_ref_calibration(vl53l0x_dev_t *dev,
-								   uint8_t *pVhvSettings,
-								   uint8_t *pPhaseCal,
-								   uint8_t get_data_enable)
-{
-	return 0;
-}
-
-/* Return 0 if OK */
 static int perform_ref_spad_management(vl53l0x_dev_t *dev,
 									   uint32_t *ref_spad_count,
 									   uint8_t *is_aperture_spads)
@@ -1643,25 +1609,6 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	if (static_init(dev)) {
 		return VL53L0X_FAIL;
 	}
-
-	/*
-	 * See ST API func VL53L0X_PerformRefCalibration()
-	 * (VL53L0X_perform_ref_calibration() --> VL53L0X_perform_vhv_calibration)
-	 **/
-	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0x01); /* Run VHV */
-	if (perform_single_ref_calibration(dev, 0x40)) {
-		return VL53L0X_FAIL;
-	}
-
-	/* See VL53L0X_perform_phase_calibration() */
-	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0x02);
-	if (perform_single_ref_calibration(dev, 0x00)) {
-		return VL53L0X_FAIL;
-	}
-
-	/* Restore the previous Sequence Config */
-	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0xE8);
-	dev->ll->delay_ms(2);
 
 	return VL53L0X_OK;
 }
