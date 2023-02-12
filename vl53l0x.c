@@ -138,6 +138,27 @@ enum {
 
 #define VL53L0X_DEFAULT_MAX_LOOP 2000
 
+/** mask existing bit in #VL53L0X_REG_SYSRANGE_START*/
+#define VL53L0X_REG_SYSRANGE_MODE_MASK		0x0F
+/** bit 0 in #VL53L0X_REG_SYSRANGE_START write 1 toggle state in
+ * continuous mode and arm next shot in single shot mode
+ */
+#define VL53L0X_REG_SYSRANGE_MODE_START_STOP	0x01
+/** bit 1 write 0 in #VL53L0X_REG_SYSRANGE_START set single shot mode */
+#define VL53L0X_REG_SYSRANGE_MODE_SINGLESHOT	0x00
+/** bit 1 write 1 in #VL53L0X_REG_SYSRANGE_START set back-to-back
+ *  operation mode
+ */
+#define VL53L0X_REG_SYSRANGE_MODE_BACKTOBACK	0x02
+/** bit 2 write 1 in #VL53L0X_REG_SYSRANGE_START set timed operation
+ *  mode
+ */
+#define VL53L0X_REG_SYSRANGE_MODE_TIMED			0x04
+/** bit 3 write 1 in #VL53L0X_REG_SYSRANGE_START set histogram operation
+ *  mode
+ */
+#define VL53L0X_REG_SYSRANGE_MODE_HISTOGRAM		0x08
+
 /*
  * TCC: Target CentreCheck
  * MSRC: Minimum Signal Rate Check
@@ -1515,6 +1536,65 @@ static int get_fraction_enable(vl53l0x_dev_t *dev, uint8_t *en)
 	return 0;
 }
 
+/* Returns 0 if OK */
+static int perform_vhv_calibration(vl53l0x_dev_t *dev)
+{
+	/* Run VHV */
+	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0x01);
+
+	/* VL53L0X_perform_single_ref_calibration() */
+	dev->ll->i2c_write_reg(SYSRANGE_START, VL53L0X_REG_SYSRANGE_MODE_START_STOP | 0x40);
+	while (get_measurement_data_ready(dev)) {
+		dev->ll->delay_ms(10);
+	}
+
+	vl53l0x_clear_flag_gpio_interrupt(dev);
+	dev->ll->i2c_write_reg(SYSRANGE_START, 0x00);
+	return 0;
+}
+
+/* Returns 0 if OK */
+static int perform_phase_calibration(vl53l0x_dev_t *dev)
+{
+	/* Run PhaseCal */
+	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0x02);
+
+	/* VL53L0X_perform_single_ref_calibration() */
+	dev->ll->i2c_write_reg(SYSRANGE_START, VL53L0X_REG_SYSRANGE_MODE_START_STOP | 0x40);
+	while (get_measurement_data_ready(dev)) {
+		dev->ll->delay_ms(10);
+	}
+
+	vl53l0x_clear_flag_gpio_interrupt(dev);
+	dev->ll->i2c_write_reg(SYSRANGE_START, 0x00);
+	return 0;
+}
+/* Returns 0 if OK */
+static int perform_ref_calibration(vl53l0x_dev_t *dev,
+                                   uint8_t *vhv_settings,
+                                   uint8_t *phase_cal,
+                                   uint8_t get_data_enable)
+{
+	uint8_t sequence_config = dev->sequence_config;
+
+	/* In the following function we don't save the config to optimize
+	 * writes on device. Config is saved and restored only once.
+	 */
+	if (perform_vhv_calibration(dev)) {
+		return 1;
+	}
+
+	if (perform_phase_calibration(dev)) {
+		return 1;
+	}
+
+	/* restore the previous Sequence Config */
+	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, sequence_config);
+	dev->sequence_config = sequence_config;
+
+	return 0;
+}
+
 /* Return 0 if OK */
 static int static_init(vl53l0x_dev_t *dev)
 {
@@ -1585,6 +1665,9 @@ static int static_init(vl53l0x_dev_t *dev)
 
 vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 {
+    uint8_t vhv_settings;
+    uint8_t phase_cal;
+
 	if (check_args(dev)) {
 		return VL53L0X_FAIL;
 	}
@@ -1607,6 +1690,10 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 	}
 
 	if (static_init(dev)) {
+		return VL53L0X_FAIL;
+	}
+
+	if (perform_ref_calibration(dev, &vhv_settings, &phase_cal, 1)) {
 		return VL53L0X_FAIL;
 	}
 
@@ -1654,27 +1741,6 @@ vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
 
 	return VL53L0X_OK;
 }
-
-/** mask existing bit in #VL53L0X_REG_SYSRANGE_START*/
-#define VL53L0X_REG_SYSRANGE_MODE_MASK		0x0F
-/** bit 0 in #VL53L0X_REG_SYSRANGE_START write 1 toggle state in
- * continuous mode and arm next shot in single shot mode
- */
-#define VL53L0X_REG_SYSRANGE_MODE_START_STOP	0x01
-/** bit 1 write 0 in #VL53L0X_REG_SYSRANGE_START set single shot mode */
-#define VL53L0X_REG_SYSRANGE_MODE_SINGLESHOT	0x00
-/** bit 1 write 1 in #VL53L0X_REG_SYSRANGE_START set back-to-back
- *  operation mode
- */
-#define VL53L0X_REG_SYSRANGE_MODE_BACKTOBACK	0x02
-/** bit 2 write 1 in #VL53L0X_REG_SYSRANGE_START set timed operation
- *  mode
- */
-#define VL53L0X_REG_SYSRANGE_MODE_TIMED			0x04
-/** bit 3 write 1 in #VL53L0X_REG_SYSRANGE_START set histogram operation
- *  mode
- */
-#define VL53L0X_REG_SYSRANGE_MODE_HISTOGRAM		0x08
 
 vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev)
 {
