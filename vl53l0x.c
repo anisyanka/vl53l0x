@@ -1077,8 +1077,6 @@ static int data_init(vl53l0x_dev_t *dev)
 	dev->ll->i2c_write_reg(0xFF, 0x00);
 	dev->ll->i2c_write_reg(0x80, 0x00);
 
-	/* УСТАНОВИТЬ КАКИЕ-ТО ЛИМИТЫ ПРОВЕРОК  ??*/
-
 	dev->ll->i2c_write_reg(SYSTEM_SEQUENCE_CONFIG, 0xFF);
 
 	return 0;

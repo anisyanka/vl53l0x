@@ -213,9 +213,10 @@ vl53l0x_ret_t vl53l0x_clear_flag_gpio_interrupt(vl53l0x_dev_t *dev); /* DO NOT c
 /*
  * Send specific command to start\stop measurement cycle according to the set mode
  *
+ * In SINGLE mode don't use this func. Use vl53l0x_get_range_mm_oneshot() API.
  * Call this function every time in VL53L0X_SINGLE mode to trigger a start of measurement cycle
  *
- * Call this function one time in VL53L0X_CONTINUOUS and VL53L0X_TIMED modes.
+ * Call this function one time in CONTINUOUS and TIMED modes.
  * Better to use  with interrupt activated.
  **/
 vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev);
