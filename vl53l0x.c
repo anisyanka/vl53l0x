@@ -1873,3 +1873,9 @@ vl53l0x_ret_t vl53l0x_get_range_mm_oneshot(vl53l0x_dev_t *dev, vl53l0x_range *ra
 
 	return VL53L0X_OK;
 }
+
+vl53l0x_ret_t vl53l0x_get_range_mm_continuous(vl53l0x_dev_t *dev, vl53l0x_range *range)
+{
+	range->range_mm = dev->ll->i2c_read_reg_16bit(0x14 + 10);
+	return VL53L0X_OK;
+}

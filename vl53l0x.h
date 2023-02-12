@@ -227,6 +227,15 @@ vl53l0x_ret_t vl53l0x_stop_measurement(vl53l0x_dev_t *dev);
  **/
 vl53l0x_ret_t vl53l0x_get_range_mm_oneshot(vl53l0x_dev_t *dev, vl53l0x_range *range);
 
+/*
+ * Returns range in millimeters via 'range' parameter
+ * Enable GPIO interrupt and use this to get range after INT will occur.
+ * Setup your pin like ext interrupt, falling edge mode. (low level is active).
+ *
+ * DO NOT call this func in a real ISR
+ **/
+vl53l0x_ret_t vl53l0x_get_range_mm_continuous(vl53l0x_dev_t *dev, vl53l0x_range *range);
+
 #ifdef __cplusplus
 }
 #endif
