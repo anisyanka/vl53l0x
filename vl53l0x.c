@@ -1697,6 +1697,10 @@ vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
 		return VL53L0X_FAIL;
 	}
 
+	if (set_measurement_timing_budget_micro_seconds(dev, 30000)) {
+		return VL53L0X_FAIL;
+	}
+
 	return VL53L0X_OK;
 }
 
