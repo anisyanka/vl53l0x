@@ -136,6 +136,8 @@ enum {
 #define VL53L0X_FIXPOINT412TOFIXPOINT1616(Value) \
 	(uint32_t)(Value<<4)
 
+#define VL53L0X_DEFAULT_MAX_LOOP 2000
+
 /*
  * TCC: Target CentreCheck
  * MSRC: Minimum Signal Rate Check
@@ -364,8 +366,6 @@ static int get_measurement_data_ready(vl53l0x_dev_t *dev)
 			return 1;
 		}
 	}
-
-	dev->ll->delay_ms(2);
 
 	return 1;
 }
@@ -1694,10 +1694,8 @@ vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev)
 	case VL53L0X_SINGLE_RANGING:
 		dev->ll->i2c_write_reg(SYSRANGE_START, VL53L0X_REG_SYSRANGE_MODE_START_STOP);
 
-		byte = start_stop_byte;
 		while ((byte & start_stop_byte) == start_stop_byte) {
-			dev->ll->delay_ms(5);
-			if (timeout_cycles >= 100) {
+			if (timeout_cycles >= VL53L0X_DEFAULT_MAX_LOOP) {
 				return VL53L0X_FAIL;
 			}
 			++timeout_cycles;
@@ -1769,7 +1767,7 @@ vl53l0x_ret_t vl53l0x_clear_flag_gpio_interrupt(vl53l0x_dev_t *dev)
 		dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CLEAR, 0x00);
 		byte = dev->ll->i2c_read_reg(RESULT_INTERRUPT_STATUS);
 
-		if (cycles >= 100) {
+		if (cycles >= VL53L0X_DEFAULT_MAX_LOOP) {
 			return VL53L0X_FAIL;
 		}
 		++cycles;
@@ -1781,31 +1779,29 @@ vl53l0x_ret_t vl53l0x_clear_flag_gpio_interrupt(vl53l0x_dev_t *dev)
 /* Based on VL53L0X_PerformSingleRangingMeasurement() */
 vl53l0x_ret_t vl53l0x_get_range_mm_oneshot(vl53l0x_dev_t *dev, vl53l0x_range *range)
 {
-	int timeout_cycles = 0;
-	uint8_t buf[12];
-
 	/* VL53L0X_PerformSingleMeasurement */
 	dev->cur_param.device_mode = VL53L0X_SINGLE_RANGING;
 	vl53l0x_start_measurement(dev);
 
-	/* Get data ready */
-	while (get_measurement_data_ready(dev) != 0) {
-		dev->ll->delay_ms(50);
-		if (timeout_cycles >= 20) {
-			return VL53L0X_FAIL;
-		}
-		++timeout_cycles;
+	/*
+	 * Get data ready.
+	 * Based on VL53L0X_measurement_poll_for_completion()
+	 **/
+	while (get_measurement_data_ready(dev)) {
+		/*
+		 * If user don't apply some settings regarding budget time, the
+		 * range sensor will do one measurements per ±16 seconds.
+		 * It was found out during experiments.
+		 **/
+		dev->ll->delay_ms(10);
 	}
 
-	/* VL53L0X_GetRangingMeasurementData */
-	dev->ll->i2c_read_reg_multi(0x14, buf, 12);
+	/* Based on VL53L0X_GetRangingMeasurementData() */
+	range->range_mm = dev->ll->i2c_read_reg_16bit(0x14 + 10);
 
-	range->range_status = buf[0];
-	range->effective_spad_cnt = VL53L0X_MAKEUINT16(buf[3],buf[2]);
-	range->uncorrected_range_mm = VL53L0X_MAKEUINT16(buf[10], buf[11]);
-
-	/* VL53L0X_ClearInterruptMask */
-	vl53l0x_clear_flag_gpio_interrupt(dev);
+	if (dev->spec_param.gpio_func == VL53L0X_GPIO_FUNC_NEW_MEASURE_READY) {
+		vl53l0x_clear_flag_gpio_interrupt(dev);
+	}
 
 	return VL53L0X_OK;
 }

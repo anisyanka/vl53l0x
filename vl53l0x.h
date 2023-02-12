@@ -36,20 +36,11 @@ typedef enum {
 
 typedef struct
 {
-	/* Range distance in millimeter (without any correction, e.g. CrossTalk compensation)*/
-	uint16_t uncorrected_range_mm;
-
-	/* SPAD count for the return signal. 8.8 format
-	 * To obtain Real value it should be divided by 256
-	 **/
-	uint16_t effective_spad_cnt;
-
 	/*
-	 * Range Status for the current measurement. This is device
-	 * dependent. Value = 0 means value is valid.
+	 * Range distance in millimeter
+	 * (without any correction, e.g. CrossTalk compensation)
 	 **/
-	uint8_t range_status;
-
+	uint16_t range_mm;;
 } vl53l0x_range;
 
 
@@ -139,7 +130,7 @@ typedef struct {
 	/* Target Ambient Rate for Ref spad management */
 	uint16_t target_ref_rate;
 
-	uint8_t module_id; /* Module ID */	
+	uint8_t module_id; /* Module ID */
 	uint8_t revision; /* test Revision */
 	char product_id[32];
 
