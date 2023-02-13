@@ -14,7 +14,7 @@ root.title("Range sensor viewer")
 range_label = tk.Label(root, text=str(random.randint(0, 1000)), font=('Arial', 100))
 range_label.pack(pady=50)
 
-sensor = serial.Serial(SERIAL_DEV_NAME, baudrate=115200, timeout = 1)
+sensor = serial.Serial(SERIAL_DEV_NAME, baudrate=115200)
 
 def thread_run(func):
     threading.Thread(target=func).start()
