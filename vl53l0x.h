@@ -8,8 +8,6 @@ extern "C" {
 #include <stdint.h>
 #include <stddef.h>
 
-#define VL53L0X_MAX_STRING_LENGTH 32
-
 /* Any functions of the lib returns one of these values */
 typedef enum {
 	VL53L0X_OK,
@@ -20,7 +18,7 @@ typedef enum {
 	VL53L0X_SINGLE_RANGING =  0,
 	VL53L0X_CONTINUOUS_RANGING =  1,
 	VL53L0X_SINGLE_HISTOGRAM =  2, /* not supported for now */
-	VL53L0X_CONTINUOUS_TIMED_RANGING =  3,
+	VL53L0X_CONTINUOUS_TIMED_RANGING =  3, /* is not working for now */
 	VL53L0X_SINGLE_ALS = 10, /* not supported for now */
 	VL53L0X_GPIO_DRIVE = 20, /* not supported for now */
 	VL53L0X_GPIO_OSC = 21, /* not supported for now */

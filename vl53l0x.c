@@ -1749,8 +1749,13 @@ vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
 {
 	switch (mode) {
 	case VL53L0X_SINGLE_RANGING:
+		break;
 	case VL53L0X_CONTINUOUS_RANGING:
+		break;
 	case VL53L0X_CONTINUOUS_TIMED_RANGING:
+		if (set_inter_measure_period(dev, ms)) {
+			return VL53L0X_FAIL;
+		}
 		break;
 
 	default:
@@ -1758,12 +1763,8 @@ vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
 	}
 
 	dev->cur_param.device_mode = mode;
-
-	if (set_inter_measure_period(dev, ms)) {
-		return VL53L0X_FAIL;
-	}
-
 	dev->cur_param.inter_measurement_period_milliseconds = ms;
+
 	return VL53L0X_OK;
 }
 
