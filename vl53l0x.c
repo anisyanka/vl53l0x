@@ -391,6 +391,24 @@ static int get_measurement_data_ready(vl53l0x_dev_t *dev)
 	return 1;
 }
 
+/* Returns 0 if OK. Based on VL53L0X_SetInterMeasurementPeriodMilliSeconds() */
+static int set_inter_measure_period(vl53l0x_dev_t *dev, uint32_t ms)
+{
+	uint16_t osc_calibrate_val;
+	uint32_t im_period_ms;
+
+	osc_calibrate_val = dev->ll->i2c_read_reg_16bit(OSC_CALIBRATE_VAL);
+
+	if (osc_calibrate_val != 0) {
+		im_period_ms = ms * osc_calibrate_val;
+	} else {
+		im_period_ms = ms;
+	}
+
+	dev->ll->i2c_write_reg_32bit(SYSTEM_INTERMEASUREMENT_PERIOD, im_period_ms);
+	return 0;
+}
+
 /*
  * Returns 0 if OK
  * Based on VL53L0X_GetInterMeasurementPeriodMilliSeconds()
@@ -872,6 +890,7 @@ static int set_measurement_timing_budget_micro_seconds(vl53l0x_dev_t *dev,
 		}
 	}
 
+	dev->cur_param.measurement_timing_budget_microseconds = microsec;
 	return 0;
 }
 
@@ -1739,8 +1758,12 @@ vl53l0x_ret_t vl53l0x_set_measurement_mode(vl53l0x_dev_t *dev,
 	}
 
 	dev->cur_param.device_mode = mode;
-	//dev->cur_param.inter_measurement_period_milliseconds = ms;
 
+	if (set_inter_measure_period(dev, ms)) {
+		return VL53L0X_FAIL;
+	}
+
+	dev->cur_param.inter_measurement_period_milliseconds = ms;
 	return VL53L0X_OK;
 }
 

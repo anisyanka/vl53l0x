@@ -34,8 +34,7 @@ typedef enum {
 	VL53L0X_GPIO_FUNC_NEW_MEASURE_READY = 4, /* New Sample Ready  */
 } vl53l0x_gpio_func_t;
 
-typedef struct
-{
+typedef struct {
 	/*
 	 * Range distance in millimeter
 	 * (without any correction, e.g. CrossTalk compensation)
@@ -45,8 +44,7 @@ typedef struct
 
 
 /* Low Level functions which must be implemented by user */
-typedef struct
-{
+typedef struct {
 	/* Millisecond program delay */
 	void (*delay_ms)(uint32_t ms);
 
@@ -144,8 +142,7 @@ typedef struct {
 	uint16_t linearity_corrective_gain;
 } vl53l0x_dev_specific_params_t;
 
-typedef struct
-{
+typedef struct {
 	/*
 	 * Hardware dependent functions.
 	 * Users have to implement its in their application
@@ -230,9 +227,11 @@ vl53l0x_ret_t vl53l0x_get_range_mm_oneshot(vl53l0x_dev_t *dev, vl53l0x_range *ra
 /*
  * Returns range in millimeters via 'range' parameter
  * Enable GPIO interrupt and use this to get range after INT will occur.
- * Setup your pin like ext interrupt, falling edge mode. (low level is active).
+ * Setup your pin like external interrupt, falling edge mode. (low level is active).
  *
  * DO NOT call this func in a real ISR
+ * You will receive INT from the GPIO after each measurement in continuous mode
+ * (±40ms) or use TIMED mode and set another time with vl53l0x_set_measurement_mode() API.
  **/
 vl53l0x_ret_t vl53l0x_get_range_mm_continuous(vl53l0x_dev_t *dev, vl53l0x_range *range);
 
