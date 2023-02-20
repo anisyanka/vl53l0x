@@ -1091,7 +1091,7 @@ static int data_init(vl53l0x_dev_t *dev)
 	dev->ll->i2c_write_reg(0x80, 0x01);
 	dev->ll->i2c_write_reg(0xFF, 0x01);
 	dev->ll->i2c_write_reg(0x00, 0x00);
-	dev->__stop_variable = dev->ll->i2c_read_reg(0x91);
+	dev->stop_variable = dev->ll->i2c_read_reg(0x91);
 	dev->ll->i2c_write_reg(0x00, 0x01);
 	dev->ll->i2c_write_reg(0xFF, 0x00);
 	dev->ll->i2c_write_reg(0x80, 0x00);
@@ -1106,6 +1106,8 @@ static void get_dev_info_from_device(vl53l0x_dev_t *dev)
 	uint8_t byte;
 	uint32_t tmp_32bit_word;
 	uint8_t nvm_ref_good_spad_map[6];
+	uint32_t signal_rate_meas_fixed1104_400_mm;
+	uint32_t dist_meas_fixed1104_400_mm;
 
 	/* Start */
 	dev->ll->i2c_write_reg(0x80, 0x01);
@@ -1214,22 +1216,22 @@ static void get_dev_info_from_device(vl53l0x_dev_t *dev)
 	dev->ll->i2c_write_reg(0x94, 0x73);
 	read_strobe(dev);
 	tmp_32bit_word = dev->ll->i2c_read_reg_32bit(0x90);
-	dev->__signal_rate_meas_fixed1104_400_mm = (tmp_32bit_word & 0x0000000ff) << 8;
+	signal_rate_meas_fixed1104_400_mm = (tmp_32bit_word & 0x0000000ff) << 8;
 
 	dev->ll->i2c_write_reg(0x94, 0x74);
 	read_strobe(dev);
 	tmp_32bit_word = dev->ll->i2c_read_reg_32bit(0x90);
-	dev->__signal_rate_meas_fixed1104_400_mm |= ((tmp_32bit_word & 0xff000000) >> 24);
+	signal_rate_meas_fixed1104_400_mm |= ((tmp_32bit_word & 0xff000000) >> 24);
 
 	dev->ll->i2c_write_reg(0x94, 0x75);
 	read_strobe(dev);
 	tmp_32bit_word = dev->ll->i2c_read_reg_32bit(0x90);
-	dev->__dist_meas_fixed1104_400_mm = (tmp_32bit_word & 0x0000000ff) << 8;
+	dist_meas_fixed1104_400_mm = (tmp_32bit_word & 0x0000000ff) << 8;
 
 	dev->ll->i2c_write_reg(0x94, 0x76);
 	read_strobe(dev);
 	tmp_32bit_word = dev->ll->i2c_read_reg_32bit(0x90);
-	dev->__dist_meas_fixed1104_400_mm |= ((tmp_32bit_word & 0xff000000) >> 24);
+	dist_meas_fixed1104_400_mm |= ((tmp_32bit_word & 0xff000000) >> 24);
 
 	/* Finish */
 	dev->ll->i2c_write_reg(0x81, 0x00);
@@ -1777,7 +1779,7 @@ vl53l0x_ret_t vl53l0x_start_measurement(vl53l0x_dev_t *dev)
 	dev->ll->i2c_write_reg(0x80, 0x01);
 	dev->ll->i2c_write_reg(0xFF, 0x01);
 	dev->ll->i2c_write_reg(0x00, 0x00);
-	dev->ll->i2c_write_reg(0x91, dev->__stop_variable);
+	dev->ll->i2c_write_reg(0x91, dev->stop_variable);
 	dev->ll->i2c_write_reg(0x00, 0x01);
 	dev->ll->i2c_write_reg(0xFF, 0x00);
 	dev->ll->i2c_write_reg(0x80, 0x00);

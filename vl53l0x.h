@@ -37,7 +37,7 @@ typedef struct {
 	 * Range distance in millimeter
 	 * (without any correction, e.g. CrossTalk compensation)
 	 **/
-	uint16_t range_mm;;
+	uint16_t range_mm;
 } vl53l0x_range;
 
 
@@ -89,14 +89,14 @@ typedef struct {
 	/* Range offset adjustment (mm) */
 	int32_t range_offset_micrometers;
 
+	/* This Array store all the Limit Check value for this device. Format 16.16 */
+	uint32_t limit_checks_value[6];
+
 	/* This Array store all the Limit Check enable for this device. */
 	uint8_t limit_checks_enable[6];
 
 	/* This Array store all the Status of the check linked to last measurement. */
 	uint8_t limit_checks_status[6];
-
-	/* This Array store all the Limit Check value for this device. Format 16.16 */
-	uint32_t limit_checks_value[6];
 
 	/* Tells if Wrap Around Check shall be enable or not */
 	uint8_t wrap_around_check_enable;
@@ -162,14 +162,7 @@ typedef struct {
 	/* Info about Single Photon Avalanche Diodes matrix */
 	vl53l0x_spad_data_t spad_data;
 
-	/*
-	 * Below data is PRIVATE!
-	 * Internally used only!
-	 **/
-	uint8_t __stop_variable;
-	/* Device specific data */
-	uint32_t __signal_rate_meas_fixed1104_400_mm;
-	uint32_t __dist_meas_fixed1104_400_mm;
+	uint8_t stop_variable;
 
 } vl53l0x_dev_t;
 
@@ -188,7 +181,7 @@ vl53l0x_ret_t vl53l0x_power_up(vl53l0x_dev_t *dev);
  *                              is started without delay. User has to stop the ranging to return
  *                              to SW standby. The last measurement is completed before stopping.
  *
- * VL53L0X_CONTINUOUS_TIMED_RANGING - ranging is performed in a continuous way after the start API function
+ * VL53L0X_CONTINUOUS_TIMED_RANGING (IS NOT WORKING FOR NOW) - ranging is performed in a continuous way after the start API function
  *                                    is called. When a measurement is finished, another one is started
  *                                    after a user defined delay (parameter ms in this API).
  *                                    This delay is inter-measurement period.
