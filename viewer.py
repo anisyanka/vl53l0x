@@ -1,8 +1,6 @@
 import tkthread; tkthread.patch()
 import tkinter as tk
 import threading
-import random
-import time
 import serial
 
 SERIAL_DEV_NAME = "/dev/tty.usbserial-120"
@@ -11,7 +9,7 @@ root = tk.Tk()
 root.geometry("500x200")
 root.title("Range sensor viewer")
 
-range_label = tk.Label(root, text=str(random.randint(0, 1000)), font=('Arial', 100))
+range_label = tk.Label(root, text=0, font=('Arial', 100))
 range_label.pack(pady=50)
 
 sensor = serial.Serial(SERIAL_DEV_NAME, baudrate=115200)
