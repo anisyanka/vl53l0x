@@ -1,3 +1,10 @@
+/*
+    ST doesn't provide a good documentation.
+    So use the open examples to make large ST's driver alive on tiny microcontollers.
+
+    For some ideas many thanks to https://www.artfulbytes.com/vl53l0x-post
+*/
+
 #ifndef VL53L0X_H
 #define VL53L0X_H
 
@@ -27,13 +34,17 @@ typedef struct {
 	/* Millisecond program delay */
 	void (*delay_ms)(uint32_t ms);
 
+	// TODO: make these function returning status of execution. Not void.
+
 	/* I2C communication low level functions */
 	void (*i2c_write_reg)(uint8_t reg, uint8_t value);
 	void (*i2c_write_reg_16bit)(uint8_t reg, uint16_t value);
 	void (*i2c_write_reg_32bit)(uint8_t reg, uint32_t value);
+	void (*i2c_write_reg_multi)(uint8_t reg, uint8_t *src_buf, size_t count);
 	uint8_t (*i2c_read_reg)(uint8_t reg);
 	uint16_t (*i2c_read_reg_16bit)(uint8_t reg);
 	uint32_t (*i2c_read_reg_32bit)(uint8_t reg);
+	void (*i2c_read_reg_multi)(uint8_t reg, uint8_t *dst_buf, size_t count);
 
 	/* Control power pin. Don't implement if don't use this pin */
 	void (*xshut_set)(void);

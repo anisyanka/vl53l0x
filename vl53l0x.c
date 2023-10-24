@@ -1,5 +1,14 @@
 #include "vl53l0x.h"
 
+
+/*
+    ST doesn't provide a good documentation.
+    So use the open examples to make large ST's driver alive on tiny microcontollers.
+
+    For some ideas many thanks to https://www.artfulbytes.com/vl53l0x-post
+*/
+
+
 /*
  * I2C interface - reference registers
  * The registers can be used to validate the user I2C interface.
@@ -121,14 +130,224 @@ typedef enum {
 } calibration_type_t;
 
 typedef enum {
-	VL53L0X_SINGLE_RANGING =  0,
-	VL53L0X_CONTINUOUS_RANGING =  1,
-	VL53L0X_SINGLE_HISTOGRAM =  2, /* not supported for now */
-	VL53L0X_CONTINUOUS_TIMED_RANGING =  3, /* not supported for now */
-	VL53L0X_SINGLE_ALS = 10, /* not supported for now */
-	VL53L0X_GPIO_DRIVE = 20, /* not supported for now */
-	VL53L0X_GPIO_OSC = 21, /* not supported for now */
+    VL53L0X_SINGLE_RANGING =  0,
+    VL53L0X_CONTINUOUS_RANGING =  1,
+    VL53L0X_SINGLE_HISTOGRAM =  2, /* not supported for now */
+    VL53L0X_CONTINUOUS_TIMED_RANGING =  3, /* not supported for now */
+    VL53L0X_SINGLE_ALS = 10, /* not supported for now */
+    VL53L0X_GPIO_DRIVE = 20, /* not supported for now */
+    VL53L0X_GPIO_OSC = 21, /* not supported for now */
 } vl53l0x_measure_mode_t;
+
+
+/* There are two types of SPAD: aperture and non-aperture. My understanding
+ * is that aperture ones let it less light (they have a smaller opening), similar
+ * to how you can change the aperture on a digital camera. Only 1/4 th of the
+ * SPADs are of type non-aperture. */
+#define SPAD_TYPE_APERTURE (0x01)
+/* The total SPAD array is 16x16, but we can only activate a quadrant spanning 44 SPADs at
+ * a time. In the ST api code they have (for some reason) selected 0xB4 (180) as a starting
+ * point (lies in the middle and spans non-aperture (3rd) quadrant and aperture (4th) quadrant). */
+#define SPAD_START_SELECT (0xB4)
+/* The total SPAD map is 16x16, but we should only activate an area of 44 SPADs at a time. */
+#define SPAD_MAX_COUNT (44)
+/* The 44 SPADs are represented as 6 bytes where each bit represents a single SPAD.
+ * 6x8 = 48, so the last four bits are unused. */
+#define SPAD_MAP_ROW_COUNT (6)
+#define SPAD_ROW_SIZE (8)
+/* Since we start at 0xB4 (180), there are four quadrants (three aperture, one aperture),
+ * and each quadrant contains 256 / 4 = 64 SPADs, and the third quadrant is non-aperture, the
+ * offset to the aperture quadrant is (256 - 64 - 180) = 12 */
+#define SPAD_APERTURE_START_INDEX (12)
+
+/**
+ * Wait for strobe value to be set. This is used when we read values
+ * from NVM (non volatile memory).
+ * 
+ * Returns VL53L0X_OK if OK
+ */
+static int read_strobe(vl53l0x_dev_t *dev)
+{
+    uint8_t strobe = 0;
+    int timeout_cycles = 0;
+
+    dev->ll->i2c_write_reg(0x83, 0x00);
+
+    /* polling using timeout to avoid deadlock */
+    while (strobe == 0) {
+        strobe = dev->ll->i2c_read_reg(0x83);
+        if (strobe != 0) {
+            break;
+        }
+
+        dev->ll->delay_ms(2);
+        if (timeout_cycles >= VL53L0X_DEFAULT_MAX_LOOP) {
+            return VL53L0X_FAIL;
+        }
+        ++timeout_cycles;
+    }
+
+    dev->ll->i2c_write_reg(0x83, 0x01);
+    return VL53L0X_OK;
+}
+
+/**
+ * Gets the spad count, spad type och "good" spad map stored by ST in NVM at
+ * their production line.
+ * .
+ * According to the datasheet, ST runs a calibration (without cover glass) and
+ * saves a "good" SPAD map to NVM (non volatile memory). The SPAD array has two
+ * types of SPADs: aperture and non-aperture. By default, all of the
+ * good SPADs are enabled, but we should only enable a subset of them to get
+ * an optimized signal rate. We should also only enable either only aperture
+ * or only non-aperture SPADs. The number of SPADs to enable and which type
+ * are also saved during the calibration step at ST factory and can be retrieved
+ * from NVM.
+ */
+static int get_spad_info_from_nvm(vl53l0x_dev_t *dev, uint8_t *spad_count, uint8_t *spad_type, uint8_t good_spad_map[6])
+{
+    uint8_t tmp_data8 = 0;
+    uint32_t tmp_data32 = 0;
+
+    /* Setup to read from NVM */
+    dev->ll->i2c_write_reg(0x80, 0x01);
+    dev->ll->i2c_write_reg(0xFF, 0x01);
+    dev->ll->i2c_write_reg(0x00, 0x00);
+    dev->ll->i2c_write_reg(0xFF, 0x06);
+    tmp_data8 = dev->ll->i2c_read_reg(0x83);
+    dev->ll->i2c_write_reg(0x83, tmp_data8 | 0x04);
+    dev->ll->i2c_write_reg(0xFF, 0x07);
+    dev->ll->i2c_write_reg(0x81, 0x01);
+    dev->ll->i2c_write_reg(0x80, 0x01);
+
+    /* Get the SPAD count and type */
+    dev->ll->i2c_write_reg(0x94, 0x6b);
+
+    if (read_strobe(dev) == VL53L0X_FAIL) {
+        return VL53L0X_FAIL;
+    }
+
+    tmp_data32 = dev->ll->i2c_read_reg_32bit(0x90);
+
+    *spad_count = (tmp_data32 >> 8) & 0x7f;
+    *spad_type = (tmp_data32 >> 15) & 0x01;
+
+    /* Since the good SPAD map is already stored in GLOBAL_CONFIG_SPAD_ENABLES_REF_0
+     * we can simply read that register instead of doing the below */
+#if 0
+    /* Get the first part of the SPAD map */
+    dev->ll->i2c_write_reg(0x94, 0x24)) {
+
+    if (read_strobe(dev) == VL53L0X_FAIL) {
+        return VL53L0X_FAIL;
+    }
+    tmp_data32 = dev->ll->i2c_read_reg_32bit(0x90))
+
+    good_spad_map[0] = (uint8_t)((tmp_data32 >> 24) & 0xFF);
+    good_spad_map[1] = (uint8_t)((tmp_data32 >> 16) & 0xFF);
+    good_spad_map[2] = (uint8_t)((tmp_data32 >> 8) & 0xFF);
+    good_spad_map[3] = (uint8_t)(tmp_data32 & 0xFF);
+
+    /* Get the second part of the SPAD map */
+    dev->ll->i2c_write_reg(0x94, 0x25);
+
+    if (read_strobe(dev) == VL53L0X_FAIL) {
+        return VL53L0X_FAIL;
+    }
+
+    tmp_data32 = dev->ll->i2c_read_reg_32bit(0x90);
+
+    good_spad_map[4] = (uint8_t)((tmp_data32 >> 24) & 0xFF);
+    good_spad_map[5] = (uint8_t)((tmp_data32 >> 16) & 0xFF);
+
+#endif
+
+    /* Restore after reading from NVM */
+    dev->ll->i2c_write_reg(0x81, 0x00);
+    dev->ll->i2c_write_reg(0xFF, 0x06);
+    tmp_data8 = dev->ll->i2c_read_reg(0x83);
+    dev->ll->i2c_write_reg(0x83, tmp_data8 & 0xfb);
+    dev->ll->i2c_write_reg(0xFF, 0x01);
+    dev->ll->i2c_write_reg(0x00, 0x01);
+    dev->ll->i2c_write_reg(0xFF, 0x00);
+    dev->ll->i2c_write_reg(0x80, 0x00);
+
+    /* When we haven't configured the SPAD map yet, the SPAD map register actually
+     * contains the good SPAD map, so we can retrieve it straight from this register
+     * instead of reading it from the NVM. */
+    dev->ll->i2c_read_reg_multi(GLOBAL_CONFIG_SPAD_ENABLES_REF_0, good_spad_map, 6);
+
+    return VL53L0X_OK;
+}
+
+/**
+ * Sets the SPADs according to the value saved to NVM by ST during production. Assuming
+ * similar conditions (e.g. no cover glass), this should give reasonable readings and we
+ * can avoid running ref spad management (tedious code).
+ * 
+ * Returns VL53L0X_OK if success
+ */
+static int set_spads_from_nvm(vl53l0x_dev_t *dev)
+{
+    uint8_t spad_map[SPAD_MAP_ROW_COUNT] = { 0 };
+    uint8_t good_spad_map[SPAD_MAP_ROW_COUNT] = { 0 };
+    uint8_t spads_enabled_count = 0;
+    uint8_t spads_to_enable_count = 0;
+    uint8_t spad_type = 0;
+    volatile uint32_t total_val = 0;
+
+    if (get_spad_info_from_nvm(dev, &spads_to_enable_count, &spad_type, good_spad_map) == VL53L0X_FAIL) {
+        return VL53L0X_FAIL;
+    }
+
+    for (int i = 0; i < 6; i++) {
+        total_val += good_spad_map[i];
+    }
+
+    dev->ll->i2c_write_reg(0xFF, 0x01);
+    dev->ll->i2c_write_reg(DYNAMIC_SPAD_REF_EN_START_OFFSET, 0x00);
+    dev->ll->i2c_write_reg(DYNAMIC_SPAD_NUM_REQUESTED_REF_SPAD, 0x2C);
+    dev->ll->i2c_write_reg(0xFF, 0x00);
+    dev->ll->i2c_write_reg(GLOBAL_CONFIG_REF_EN_START_SELECT, SPAD_START_SELECT);
+
+    uint8_t offset = (spad_type == SPAD_TYPE_APERTURE) ? SPAD_APERTURE_START_INDEX : 0;
+
+    /* Create a new SPAD array by selecting a subset of the SPADs suggested by the good SPAD map.
+     * The subset should only have the number of type enabled as suggested by the reading from
+     * the NVM (spads_to_enable_count and spad_type). */
+    for (int row = 0; row < SPAD_MAP_ROW_COUNT; row++) {
+        for (int column = 0; column < SPAD_ROW_SIZE; column++) {
+            int index = (row * SPAD_ROW_SIZE) + column;
+            if (index >= SPAD_MAX_COUNT) {
+                return VL53L0X_FAIL;
+            }
+            if (spads_enabled_count == spads_to_enable_count) {
+                /* We are done */
+                break;
+            }
+            if (index < offset) {
+                continue;
+            }
+            if ((good_spad_map[row] >> column) & 0x1) {
+                spad_map[row] |= (1 << column);
+                spads_enabled_count++;
+            }
+        }
+        if (spads_enabled_count == spads_to_enable_count) {
+            /* To avoid looping unnecessarily when we are already done. */
+            break;
+        }
+    }
+
+    if (spads_enabled_count != spads_to_enable_count) {
+        return VL53L0X_FAIL;
+    }
+
+    /* Write the new SPAD configuration */
+    dev->ll->i2c_write_reg_multi(GLOBAL_CONFIG_SPAD_ENABLES_REF_0, spad_map, SPAD_MAP_ROW_COUNT);
+
+    return VL53L0X_OK;
+}
 
 /* Returns 0 if OK */
 static int check_args(vl53l0x_dev_t *dev)
@@ -187,7 +406,7 @@ static int data_init(vl53l0x_dev_t *dev)
     dev->ll->i2c_write_reg(0xFF, 0x00);
     dev->ll->i2c_write_reg(0x80, 0x00);
 
-    return 0;
+    return VL53L0X_OK;
 }
 
 static void set_sequence_steps_enabled(vl53l0x_dev_t *dev, uint8_t sequence_step)
@@ -197,9 +416,10 @@ static void set_sequence_steps_enabled(vl53l0x_dev_t *dev, uint8_t sequence_step
 
 static int perform_single_ref_calibration(vl53l0x_dev_t *dev, calibration_type_t calib_type)
 {
-
+    uint8_t interrupt_status = 0;
     uint8_t sysrange_start = 0;
     uint8_t sequence_config = 0;
+    int timeout_cycles = 0;
 
     switch (calib_type) {
     case CALIBRATION_TYPE_VHV:
@@ -216,16 +436,18 @@ static int perform_single_ref_calibration(vl53l0x_dev_t *dev, calibration_type_t
     dev->ll->i2c_write_reg(SYSRANGE_START, sysrange_start);
 
     /* Wait for interrupt */
-    uint8_t interrupt_status = 0;
     do {
+        if (timeout_cycles >= VL53L0X_DEFAULT_MAX_LOOP) {
+            return VL53L0X_FAIL;
+        }
+        ++timeout_cycles;
         interrupt_status = dev->ll->i2c_read_reg(RESULT_INTERRUPT_STATUS);
     } while ((interrupt_status & 0x07) == 0);
-
 
     dev->ll->i2c_write_reg(SYSTEM_INTERRUPT_CLEAR, 0x01);
     dev->ll->i2c_write_reg(SYSRANGE_START, 0x00);
 
-    return 0;
+    return VL53L0X_OK;
 }
 
 static int perform_ref_calibration(vl53l0x_dev_t *dev)
@@ -249,6 +471,10 @@ static int perform_ref_calibration(vl53l0x_dev_t *dev)
 /* Return 0 if OK */
 static int static_init(vl53l0x_dev_t *dev)
 {
+    if (set_spads_from_nvm(dev) == VL53L0X_FAIL) {
+        return VL53L0X_FAIL;
+    }
+
     /* Same as default tuning settings provided by ST api code */
     dev->ll->i2c_write_reg(0xFF, 0x01);
     dev->ll->i2c_write_reg(0x00, 0x00);
@@ -347,7 +573,7 @@ static int static_init(vl53l0x_dev_t *dev)
                                     RANGE_SEQUENCE_STEP_PRE_RANGE +
                                     RANGE_SEQUENCE_STEP_FINAL_RANGE);
 
-    return 0;
+    return VL53L0X_OK;
 }
 
 vl53l0x_ret_t vl53l0x_init(vl53l0x_dev_t *dev)
@@ -433,15 +659,28 @@ vl53l0x_ret_t vl53l0x_do_measurement(vl53l0x_dev_t *dev, vl53l0x_measure_mode_t 
         } while (sysrange_start & 0x01);
 
         timeout_cycles = 0;
+        if (dev->gpio_func == VL53L0X_GPIO_FUNC_OFF) {
+            do {
+                if (timeout_cycles >= VL53L0X_DEFAULT_MAX_LOOP) {
+                    return VL53L0X_FAIL;
+                }
+                ++timeout_cycles;
 
-        do {
-            if (timeout_cycles >= VL53L0X_DEFAULT_MAX_LOOP) {
-                return VL53L0X_FAIL;
-            }
-            ++timeout_cycles;
+                interrupt_status = dev->ll->i2c_read_reg(RESULT_RANGE_STATUS);
+            } while ((interrupt_status & 0x01) == 0);
+        }
 
-            interrupt_status = dev->ll->i2c_read_reg(RESULT_INTERRUPT_STATUS);
-        } while ((interrupt_status & 0x07) == 0);
+        timeout_cycles = 0;
+        if (dev->gpio_func == VL53L0X_GPIO_FUNC_NEW_MEASURE_READY) {
+            do {
+                if (timeout_cycles >= VL53L0X_DEFAULT_MAX_LOOP) {
+                    return VL53L0X_FAIL;
+                }
+                ++timeout_cycles;
+
+                interrupt_status = dev->ll->i2c_read_reg(RESULT_INTERRUPT_STATUS);
+            } while ((interrupt_status & 0x07) == 0);
+        }
 
         break;
 
@@ -532,11 +771,11 @@ vl53l0x_ret_t vl53l0x_read_in_oneshot_mode(vl53l0x_dev_t *dev, uint16_t *range)
 
 vl53l0x_ret_t vl53l0x_start_continuous_measurements(vl53l0x_dev_t *dev)
 {
-	return vl53l0x_do_measurement(dev, VL53L0X_CONTINUOUS_RANGING);
+    return vl53l0x_do_measurement(dev, VL53L0X_CONTINUOUS_RANGING);
 }
 
 vl53l0x_ret_t vl53l0x_get_range_mm_continuous(vl53l0x_dev_t *dev, uint16_t *range)
 {
-    *range = dev->ll->i2c_read_reg_16bit(0x14 + 10);
+    *range = dev->ll->i2c_read_reg_16bit(RESULT_RANGE_STATUS + 10);
     return VL53L0X_OK;
 }
