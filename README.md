@@ -9,6 +9,7 @@ Read more here:  https://community.st.com/s/question/0D50X00009XkYG8SAN/vl53l0x-
 # My features:
  - NOT WIN32 ORIENTED
  - Interrupt setup support
+ - Temprature calibration support. It is done inside vl53l0x_init() function.
  - Hardware independent. Just implement these low level functions:
 ```
 typedef struct {
@@ -38,7 +39,7 @@ int main()
 {
 	vl53l0x_ll_t vl53l0x_ll;
 	vl53l0x_dev_t vl53l0x_dev;
-	vl53l0x_range range;
+	uint16_t range;
 
 	vl53l0x_ll.delay_ms = vl53l0x_delay; /* You have to implement this function */
 	vl53l0x_ll.i2c_write_reg = vl53l0x_i2c_write_reg; /* You have to implement this function */
@@ -56,12 +57,10 @@ int main()
 
 	vl53l0x_init(&vl53l0x_dev);
 	vl53l0x_deactivate_gpio_interrupt(&vl53l0x_dev); /* Interrupts enabled by default */
-	vl53l0x_set_measurement_mode(&vl53l0x_dev, VL53L0X_SINGLE_RANGING, 0); // <---- single mode
-	vl53l0x_start_measurement(&vl53l0x_dev);
 
 	while (1) {
-		vl53l0x_get_range_mm_oneshot(&vl53l0x_dev, &range);
-		printf("Range = %d [mm]", range.range_mm);
+		vl53l0x_read_in_oneshot_mode(&vl53l0x_dev, &range);
+		printf("Range = %d [mm]", range);
 	}
 }
 ```
@@ -93,8 +92,7 @@ int main()
 	vl53l0x_dev.ll = &vl53l0x_ll;
 
 	vl53l0x_init(&vl53l0x_dev);
-	vl53l0x_set_measurement_mode(&vl53l0x_dev, VL53L0X_CONTINUOUS_RANGING, 0); // <---- continuous mode
-	vl53l0x_start_measurement(&vl53l0x_dev);
+	vl53l0x_start_continuous_measurements(&vl53l0x_dev);
 
 	while (1) {
 		if (ranging_sensor_int_flag) {
